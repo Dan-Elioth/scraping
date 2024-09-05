@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ noticia[1] }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Estilo personalizado para hacer el contenido más atractivo */
+        .content {
+            line-height: 1.8;
+        }
+        .news-image {
+            max-height: 500px;
+            object-fit: cover;
+        }
+        .shadow-hover:hover {
+            transform: scale(1.01);
+            transition: transform 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+    <!-- Contenedor principal -->
+    <div class="container mx-auto p-4 lg:p-8">
+        <!-- Título de la noticia -->
+        <h1 class="text-5xl font-bold text-center mb-10 text-blue-800">{{ noticia[1] }}</h1> 
+        
+        <div class="bg-white rounded-lg shadow-md p-6 lg:p-10 shadow-hover">
+            <!-- Imagen de la noticia -->
+            {% if noticia[4] %}
+                <img src="{{ noticia[4] }}" alt="Imagen de la noticia" class="w-full h-auto object-cover rounded-lg mb-6 news-image">
+            {% else %}
+                <img src="https://via.placeholder.com/800x400?text=Imagen+no+disponible" alt="Imagen no disponible" class="w-full h-auto object-cover rounded-lg mb-6 news-image">
+            {% endif %}
+            
+            <!-- Fecha de la noticia -->
+            <p class="text-gray-500 mb-4 text-lg"><strong>Fecha de publicación:</strong> {{ noticia[2] }}</p>
+            
+            <!-- Contenido completo de la noticia -->
+            <div class="content text-gray-800 text-lg  mb-8">
+                {{ noticia[6] }}
+            </div>
+            
+            <!-- Enlace a la noticia original -->
+            <a href="{{ noticia[5] }}" target="_blank" class="inline-block bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300">
+                Leer más en la fuente original
+            </a>
+        </div>
+    </div>
+
+</body>
+</html>

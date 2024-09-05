@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Noticias - Diario Sin Fronteras</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .news-card:hover {
+            transform: scale(1.02);
+            transition: transform 0.3s ease-in-out;
+        }
+        .category-card:hover {
+            background-color: #f0f0f0;
+            transition: background-color 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+    <!-- Header del Diario Sin Fronteras -->
+    <header class="bg-blue-800 text-white py-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">Diario Sin Fronteras</h1>
+            <nav>
+                <a href="/" class="text-lg hover:underline">Inicio</a>
+                <a href="#categorias" class="ml-4 text-lg hover:underline">Categorías</a>
+                <a href="#noticias" class="ml-4 text-lg hover:underline">Noticias</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <div class="container mx-auto p-6 mt-6 bg-white rounded-lg shadow-lg">
+        <h2 class="text-4xl font-bold text-center mb-8">Portal de Noticias - Diario Sin Fronteras</h2>
+
+        <!-- Sección de Categorías con nuevo estilo -->
+        <h2 id="categorias" class="text-3xl font-semibold mb-6 text-blue-800">Categorías</h2>
+        <section class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+            {% for categoria in categorias %}
+            <div class="category-card flex p-6 rounded-lg bg-gray-100 cursor-pointer hover:shadow-lg">
+                <svg class="text-blue-500 w-12 h-12" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="#1D4ED8">
+                    <path d="M212-241v-339h60v339h-60Zm242 0v-339h60v339h-60ZM80-121v-60h800v60H80Zm608-120v-339h60v339h-60ZM80-640v-53l400-228 400 228v53H80Zm134-60h532-532Zm0 0h532L480-852 214-700Z" />
+                </svg>
+                <div class="ml-4">
+                    <div class="text-lg font-medium text-gray-700">
+                        <a href="{{ url_for('noticias_por_categoria', categoria_nombre=categoria['nombre']) }}" class="text-blue-500 hover:underline">
+                            {{ categoria['nombre'] }}
+                        </a>
+                    </div>
+                    <div class="mt-1 text-sm text-gray-500">Explora noticias sobre {{ categoria['nombre'] }}.</div>
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+
+        <!-- Botón para descargar el archivo CSV -->
+        <div class="text-center mt-6">
+            <a href="{{ url_for('descargar_csv') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700">
+                Descargar Noticias en CSV
+            </a>
+        </div>
+
+        <!-- Sección de Noticias -->
+        <h2 id="noticias" class="text-3xl font-semibold mb-6 text-blue-800">Últimas Noticias</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {% for article in news %}
+                <div class="news-card bg-white rounded-lg shadow-md hover:shadow-xl p-6 transform transition-all">
+                    <img src="{{ article[4] }}" alt="Imagen de la noticia" class="w-full h-48 object-cover rounded-lg mb-4">
+                    <h2 class="text-xl font-semibold text-blue-700 mb-2">
+                        <a href="{{ url_for('noticia_detallada', noticia_id=article[0]) }}" class="hover:underline">{{ article[1] }}</a>
+                    </h2>
+                    <p class="text-gray-500 mb-2"><strong>Fecha:</strong> {{ article[2] }}</p>
+                    <p class="text-gray-700">{{ article[3] }}</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-blue-800 text-white py-6 mt-8">
+        <div class="container mx-auto text-center">
+            <p>&copy; 2024 Diario Sin Fronteras. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
