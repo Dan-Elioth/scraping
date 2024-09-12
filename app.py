@@ -1,10 +1,14 @@
+import re
+from datetime import datetime, timedelta
 from threading import Thread
 
 import mysql.connector
 import pandas as pd
 import requests
+from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from flask import Flask, render_template, send_file, url_for
+from flask import (Flask, redirect, render_template, render_template_string,
+                   request, send_file, url_for)
 
 # Conexión a la base de datos MySQL
 db = mysql.connector.connect(
@@ -18,43 +22,76 @@ cursor = db.cursor()
 
 app = Flask(__name__)
 
+# Función para convertir fechas relativas a absolutas
+def convertir_fecha_relativa(fecha_relativa):
+    ahora = datetime.now()
+    
+    # Buscar la cantidad de tiempo y el tipo (horas, días, etc.)
+    match = re.search(r'(\d+)\s*(hora|horas|día|días|minuto|minutos|semana|semanas)\s*atrás', fecha_relativa)
+    
+    if match:
+        cantidad = int(match.group(1))
+        unidad = match.group(2)
+        
+        if 'hora' in unidad:
+            fecha = ahora - timedelta(hours=cantidad)
+        elif 'día' in unidad:
+            fecha = ahora - timedelta(days=cantidad)
+        elif 'minuto' in unidad:
+            fecha = ahora - timedelta(minutes=cantidad)
+        elif 'semana' in unidad:
+            fecha = ahora - timedelta(weeks=cantidad)
+        else:
+            return ahora  # Si no es un formato reconocido, retorna la fecha y hora actuales.
+        
+        return fecha.strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        # Si no hay coincidencia, asumir que es la fecha actual
+        return ahora.strftime('%Y-%m-%d %H:%M:%S')
+
 # Función para verificar si una noticia ya existe en la base de datos
-def noticia_existe(title, content):
-    query = "SELECT COUNT(*) FROM noticias WHERE title = %s AND content = %s"
-    cursor.execute(query, (title, content))
+# Función para verificar si una noticia ya existe en la base de datos usando la URL
+def noticia_existe(url):
+    query = "SELECT COUNT(*) FROM noticias WHERE url = %s"
+    cursor.execute(query, (url,))
     result = cursor.fetchone()
     return result[0] > 0
 
-# Función para eliminar duplicados en la tabla noticias
-def eliminar_duplicados_noticias():
-    query = """
-    DELETE n1 FROM noticias n1
-    INNER JOIN noticias n2 
-    WHERE n1.id > n2.id AND n1.title = n2.title AND n1.content = n2.content
-    """
-    cursor.execute(query)
-    db.commit()
-
-# Función para insertar una noticia en la base de datos
+# Función para insertar o actualizar una noticia en la base de datos
 def insert_noticia(title, date, content, image, url, source, full_content):
-    # Primero verificamos si la noticia ya existe
-    if noticia_existe(title, content):
-        print(f"Noticia duplicada encontrada: {title}. No se insertará.")
+    # Verificamos si la noticia ya existe usando la URL como identificador único
+    if noticia_existe(url):
+        # Si la noticia existe, actualizamos los campos
+        print(f"Noticia encontrada: {title}. Se actualizará.")
+        query = """
+        UPDATE noticias 
+        SET title = %s, date = %s, content = %s, image = %s, source = %s, full_content = %s
+        WHERE url = %s
+        """
+        values = (title, date, content, image, source, full_content, url)
     else:
-        query = "INSERT INTO noticias (title, date, content, image, url, source, full_content) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        # Si la noticia no existe, la insertamos
+        print(f"Insertando noticia: {title}.")
+        query = """
+        INSERT INTO noticias (title, date, content, image, url, source, full_content) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
         values = (title, date, content, image, url, source, full_content)
-        cursor.execute(query, values)
-        db.commit()
-        print(f"Noticia insertada: {title}")
+
+    # Ejecutamos la consulta
+    cursor.execute(query, values)
+    db.commit()
+    print(f"Operación completada para la noticia: {title}")
 
 # Función para obtener todas las noticias de la base de datos
 def get_all_noticias():
-    cursor.execute("SELECT * FROM noticias")
+    query = "SELECT * FROM noticias ORDER BY date DESC"
+    cursor.execute(query)
     return cursor.fetchall()
 
 # Función para obtener las noticias filtradas por una categoría
 def get_noticias_por_categoria(categoria_nombre):
-    query = "SELECT * FROM noticias WHERE source = %s"
+    query = "SELECT * FROM noticias WHERE source = %s ORDER BY date DESC"
     cursor.execute(query, (categoria_nombre,))
     return cursor.fetchall()
 
@@ -86,7 +123,8 @@ def scrape_diariosinfronteras_por_categoria(categoria_url, categoria_nombre):
     articles = soup.find_all('div', class_='layout-wrap')
     for article in articles:
         title = article.find('h3', class_='entry-title').text.strip()
-        date = article.find('div', class_='post-date-bd').find('span').text.strip()
+        fecha_relativa = article.find('div', class_='post-date-bd').find('span').text.strip()
+        date = convertir_fecha_relativa(fecha_relativa)  # Convertimos la fecha relativa a un formato estándar
         content = article.find('div', class_='post-excerpt').text.strip()
         image = article.find('img')['src']
         url = article.find('a')['href']
@@ -160,11 +198,31 @@ def home():
     # Scraping de las categorías
     categorias = scrape_categorias_diariosinfronteras()
 
-    # Cargar noticias desde la base de datos
+    # Cargar todas las noticias desde la base de datos
     noticias = get_all_noticias()
 
-    # Renderizar la plantilla con noticias y categorías
-    return render_template('index.html', news=noticias, categorias=categorias)
+    # Cargar las noticias del día presente
+    noticias_del_dia = get_noticias_del_dia()
+
+    # Obtener el número de noticias del día
+    total_noticias_del_dia = len(noticias_del_dia)
+
+    # Agregar el conteo de noticias a las categorías
+    categorias_con_conteo = []
+    for categoria in categorias:
+        conteo = get_noticias_conteo_por_categoria(categoria['nombre'])
+        categorias_con_conteo.append({
+            'nombre': categoria['nombre'],
+            'url': categoria['url'],
+            'conteo': conteo
+        })
+
+    # Renderizar la plantilla con noticias, noticias del día, categorías, y conteo total de noticias
+    total_noticias = len(noticias)
+    return render_template('index.html', news=noticias, categorias=categorias_con_conteo, total_noticias=total_noticias, noticias_del_dia=noticias_del_dia, total_noticias_del_dia=total_noticias_del_dia)
+
+
+
 
 # Ruta para mostrar noticias filtradas por categoría
 @app.route('/categoria/<categoria_nombre>')
@@ -189,13 +247,137 @@ def noticia_detallada(noticia_id):
     else:
         return "No se encontró la noticia.", 404
 
+@app.route('/admin', methods=['GET'])
+def admin_page():
+    # Obtener el número de página de la solicitud (por defecto la página 1)
+    page = request.args.get('page', 1, type=int)
+    per_page = 10  # Mostrar 10 noticias por página
+
+    # Obtener el término de búsqueda
+    search_query = request.args.get('search', '')
+
+    # Si hay una búsqueda, filtrar las noticias por el título
+    if search_query:
+        cursor.execute("SELECT * FROM noticias WHERE title LIKE %s LIMIT %s OFFSET %s", ('%' + search_query + '%', per_page, (page - 1) * per_page))
+    else:
+        cursor.execute("SELECT * FROM noticias LIMIT %s OFFSET %s", (per_page, (page - 1) * per_page))
+
+    noticias = cursor.fetchall()
+
+    # Obtener el número total de noticias
+    if search_query:
+        cursor.execute("SELECT COUNT(*) FROM noticias WHERE title LIKE %s", ('%' + search_query + '%',))
+    else:
+        cursor.execute("SELECT COUNT(*) FROM noticias")
+    
+    total_noticias = cursor.fetchone()[0]
+
+    # Calcular el número total de páginas
+    total_pages = (total_noticias // per_page) + (1 if total_noticias % per_page > 0 else 0)
+
+    # Verificar si la solicitud es AJAX y retornar solo la tabla
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render_template('tabla_noticias.html', noticias=noticias, page=page, total_pages=total_pages)
+
+    # Si no es AJAX, renderizar la página completa
+    return render_template('admin.html', noticias=noticias, page=page, total_pages=total_pages, search_query=search_query)
+
+
+@app.route('/admin/nueva', methods=['GET', 'POST'])
+def nueva_noticia():
+    if request.method == 'POST':
+        title = request.form['title']
+        date = request.form['date']
+        content = request.form['content']
+        image = request.form['image']
+        url = request.form['url']
+        source = request.form['source']
+        full_content = request.form['full_content']
+
+        # Insertar la nueva noticia
+        insert_noticia(title, date, content, image, url, source, full_content)
+        return redirect(url_for('admin_page'))
+
+    return render_template('nueva_noticia.html')
+
+
+@app.route('/admin/editar/<int:noticia_id>', methods=['GET', 'POST'])
+def editar_noticia(noticia_id):
+    # Obtener la noticia desde la base de datos
+    cursor.execute("SELECT * FROM noticias WHERE id = %s", (noticia_id,))
+    noticia = cursor.fetchone()
+
+    if request.method == 'POST':
+        title = request.form['title']
+        date = request.form['date']  # La fecha ya debería estar en el formato 'YYYY-MM-DD' en el POST
+        content = request.form['content']
+        image = request.form['image']
+        url = request.form['url']
+        source = request.form['source']
+        full_content = request.form['full_content']
+
+        # Actualizar la noticia en la base de datos
+        query = """
+        UPDATE noticias SET title = %s, date = %s, content = %s, image = %s, url = %s, source = %s, full_content = %s 
+        WHERE id = %s
+        """
+        cursor.execute(query, (title, date, content, image, url, source, full_content, noticia_id))
+        db.commit()
+        return redirect(url_for('admin_page'))
+
+    # Convertir la tupla en lista para poder modificarla
+    noticia = list(noticia)
+
+    # Verificar si la fecha es una instancia de datetime y formatearla si es necesario
+    if isinstance(noticia[2], datetime):
+        noticia[2] = noticia[2].strftime('%Y-%m-%d')  # Convertir al formato YYYY-MM-DD para el campo <input type="date">
+    else:
+        # Si no es una fecha válida, dejamos el texto plano como "Hace 8 días" o como está en la base de datos
+        noticia[2] = noticia[2]  # El texto plano se muestra tal como está
+
+    return render_template('editar_noticia.html', noticia=noticia)
+
+
+
+@app.route('/admin/eliminar/<int:noticia_id>')
+def eliminar_noticia(noticia_id):
+    cursor.execute("DELETE FROM noticias WHERE id = %s", (noticia_id,))
+    db.commit()
+    return redirect(url_for('admin_page'))
+
+# Función que ejecutará el scraping periódicamente
+def ejecutar_scraping_periodico():
+    scrape_todas_las_categorias()  # Llamamos a la función de scraping # Limpiamos duplicados
+    print("Scraping periódico ejecutado.")
+
+# Configurar el programador de tareas
+scheduler = BackgroundScheduler()
+scheduler.add_job(ejecutar_scraping_periodico, 'interval', minutes=5)
+scheduler.start()
+
+def get_noticias_del_dia():
+    hoy = datetime.now().strftime('%Y-%m-%d')  # Fecha actual en formato 'YYYY-MM-DD'
+    query = "SELECT * FROM noticias WHERE DATE(date) = %s ORDER BY date DESC"
+    cursor.execute(query, (hoy,))
+    return cursor.fetchall()
+
+
+# Obtener el conteo de noticias por categoría
+def get_noticias_conteo_por_categoria(categoria_nombre):
+    query = "SELECT COUNT(*) FROM noticias WHERE source = %s"
+    cursor.execute(query, (categoria_nombre,))
+    result = cursor.fetchone()
+    return result[0]
+
+
 # Iniciar scraping en un hilo separado
 def start_scraping():
     print("Iniciando scraping en segundo plano...")
     scrape_todas_las_categorias()
-    eliminar_duplicados_noticias()
     exportar_noticias_a_csv()
     print("Scraping completado.")
+    
+    
 
 if __name__ == '__main__':
     # Iniciar el scraping en segundo plano después de que el servidor esté en marcha

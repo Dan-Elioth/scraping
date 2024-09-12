@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Noticias - Diario Sin Fronteras</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Aseguramos que el HTML y el body ocupen toda la altura de la ventana */
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        
+        /* Usamos flexbox para que el contenido empuje al footer hacia abajo */
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* El contenedor principal debe expandirse para llenar el espacio restante */
+        .container-principal {
+            flex: 1;
+        }
+    </style>
+    <script>
+        // Función para buscar automáticamente con cada carácter
+        function buscarNoticias() {
+            const searchQuery = document.getElementById('search').value;
+            const url = `/admin?search=${searchQuery}`;
+    
+            fetch(url, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'  // Indicamos que es una solicitud AJAX
+                }
+            })
+            .then(response => response.text())
+            .then(data => {
+                document.getElementById('tablaNoticias').innerHTML = data;  // Actualizamos solo la tabla
+            });
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+    <header class="bg-blue-800 text-white py-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">Panel de Administrador</h1>
+            <nav>
+                <a href="/" class="text-lg hover:underline">Inicio</a>
+                <a href="{{ url_for('admin_page') }}" class="ml-4 text-lg hover:underline text-yellow-400 font-bold">Administrador</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Contenedor principal -->
+    <div class="container mx-auto p-6 mt-6 bg-white rounded-lg shadow-lg container-principal">
+        <h2 class="text-4xl font-bold text-center mb-8">Gestión de Noticias</h2>
+
+        <!-- Formulario de búsqueda y botón de agregar noticia -->
+        <div class="flex justify-between mb-6 items-center">
+            <!-- Formulario de búsqueda -->
+            <form action="#" method="GET" class="flex items-center w-2/4 mr-4">
+                <div class="flex items-center w-full">
+                    <input type="text" id="search" name="search" placeholder="Buscar por título..." value="{{ search_query }}" class="w-3/4 p-2 border border-gray-300 rounded-lg" oninput="buscarNoticias()">
+                </div>
+            </form>
+            
+            <!-- Botón para agregar nueva noticia -->
+            <a href="{{ url_for('nueva_noticia') }}" class="bg-green-500 text-white py-2 px-5 rounded hover:bg-green-700 whitespace-nowrap">
+                + Agregar Noticia
+            </a>
+        </div>
+        
+
+        <!-- Contenedor para la tabla de noticias -->
+        <div id="tablaNoticias">
+            <!-- Aquí se inyectará la tabla generada desde el backend -->
+            {% include 'tabla_noticias.html' %}
+        </div>
+    </div>
+
+    <footer class="bg-blue-800 text-white py-10 mt-8">
+        <div class="container mx-auto text-center">
+            <p>&copy; 2024 Diario Sin Fronteras. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
