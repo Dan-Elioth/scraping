@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportes de Noticias</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+    <header class="bg-blue-800 text-white py-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">Generar Reportes</h1>
+            <nav>
+                <a href="/" class="text-lg hover:underline">Inicio</a>
+                <a href="/admin" class="ml-4 text-lg hover:underline text-yellow-400 font-bold">Administrador</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container mx-auto p-6 mt-6 bg-white rounded-lg shadow-lg">
+        <h2 class="text-4xl font-bold text-center mb-8">Seleccionar Rango de Fechas y Categoría</h2>
+
+        <!-- Botones para descargar CSV o PDF en la parte superior -->
+        <div class="flex justify-center mb-4">
+            <a href="/descargar_reporte_csv?fecha_inicio={{ request.form['fecha_inicio'] }}&fecha_fin={{ request.form['fecha_fin'] }}&categoria={{ request.form['categoria'] }}" 
+               class="bg-green-500 text-white py-2 px-5 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+               Descargar CSV
+            </a>               
+            <a href="/descargar_pdf?fecha_inicio={{ request.form['fecha_inicio'] }}&fecha_fin={{ request.form['fecha_fin'] }}&categoria={{ request.form['categoria'] }}" 
+               class="bg-red-500 text-white py-2 px-5 rounded hover:bg-red-700 ml-4">
+               Descargar PDF
+            </a>
+        </div>
+
+        <!-- Formulario para seleccionar rango de fechas y categoría -->
+        <form method="POST" action="/reportes">
+            <div class="flex justify-center space-x-4 mb-4">
+                <div>
+                    <label for="fecha_inicio" class="block text-lg font-semibold mb-2">Fecha Inicio:</label>
+                    <input type="date" id="fecha_inicio" name="fecha_inicio" class="p-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label for="fecha_fin" class="block text-lg font-semibold mb-2">Fecha Fin:</label>
+                    <input type="date" id="fecha_fin" name="fecha_fin" class="p-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label for="categoria" class="block text-lg font-semibold mb-2">Categoría:</label>
+                    <select id="categoria" name="categoria" class="p-2 border border-gray-300 rounded-lg">
+                        <option value="">Todas las categorías</option>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria }}">{{ categoria }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex justify-center">
+                <button type="submit" class="bg-blue-500 text-white py-2 px-5 rounded hover:bg-blue-700">Generar Reporte</button>
+            </div>
+        </form>
+
+        <!-- Tabla de noticias si se han seleccionado -->
+        {% if noticias %}
+            <h3 class="text-2xl font-semibold mt-8">Noticias Encontradas:</h3>
+            <table class="table-auto w-full mt-4">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2">ID</th>
+                        <th class="px-4 py-2">Título</th>
+                        <th class="px-4 py-2">Fecha</th>
+                        <th class="px-4 py-2">Fuente</th>
+                        <th class="px-4 py-2">Contenido</th>
+                        <th class="px-4 py-2">Categoria</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for noticia in noticias %}
+                        <tr>
+                            <td class="border px-4 py-2">{{ noticia[0] }}</td>
+                            <td class="border px-4 py-2">{{ noticia[1] }}</td>
+                            <td class="border px-4 py-2">{{ noticia[2] }}</td>
+                            <td class="border px-4 py-2">{{ noticia[5] }}</td>
+                            <td class="border px-4 py-2">{{ noticia[3] }}</td>
+                            <td class="border px-4 py-2">{{ noticia[7] }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+
+</body>
+</html>

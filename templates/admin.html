@@ -6,37 +6,31 @@
     <title>Lista de Noticias - Diario Sin Fronteras</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        /* Aseguramos que el HTML y el body ocupen toda la altura de la ventana */
         html, body {
             height: 100%;
             margin: 0;
         }
-        
-        /* Usamos flexbox para que el contenido empuje al footer hacia abajo */
         body {
             display: flex;
             flex-direction: column;
         }
-        
-        /* El contenedor principal debe expandirse para llenar el espacio restante */
         .container-principal {
             flex: 1;
         }
     </style>
     <script>
-        // Función para buscar automáticamente con cada carácter
         function buscarNoticias() {
             const searchQuery = document.getElementById('search').value;
             const url = `/admin?search=${searchQuery}`;
     
             fetch(url, {
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'  // Indicamos que es una solicitud AJAX
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
             })
             .then(response => response.text())
             .then(data => {
-                document.getElementById('tablaNoticias').innerHTML = data;  // Actualizamos solo la tabla
+                document.getElementById('tablaNoticias').innerHTML = data;
             });
         }
     </script>
@@ -52,9 +46,18 @@
             </nav>
         </div>
     </header>
+  
+
 
     <!-- Contenedor principal -->
     <div class="container mx-auto p-6 mt-6 bg-white rounded-lg shadow-lg container-principal">
+        <a href="/estadisticas" class="bg-blue-500 text-white py-2 px-5 mb-10 rounded hover:bg-blue-700 whitespace-nowrap">
+            Ver Estadísticas
+        </a>
+        <a href="/reportes" class="bg-blue-500 text-white py-2 px-5 rounded hover:bg-blue-700 whitespace-nowrap">
+            Ver Reportes
+        </a>   
+        
         <h2 class="text-4xl font-bold text-center mb-8">Gestión de Noticias</h2>
 
         <!-- Formulario de búsqueda y botón de agregar noticia -->
@@ -71,16 +74,14 @@
                 + Agregar Noticia
             </a>
         </div>
-        
 
         <!-- Contenedor para la tabla de noticias -->
-        <div id="tablaNoticias">
-            <!-- Aquí se inyectará la tabla generada desde el backend -->
+        <div id="tablaNoticias" class="mt-8">
             {% include 'tabla_noticias.html' %}
         </div>
     </div>
 
-    <footer class="bg-blue-800 text-white py-10 mt-8">
+    <footer class="bg-blue-800 text-white py-5 mt-8">
         <div class="container mx-auto text-center">
             <p>&copy; 2024 Diario Sin Fronteras. Todos los derechos reservados.</p>
         </div>

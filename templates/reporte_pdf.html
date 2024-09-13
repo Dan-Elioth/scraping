@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Noticias</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Reporte de Noticias</h1>
+    <p><strong>Rango de Fechas:</strong> {{ fecha_inicio }} - {{ fecha_fin }}</p>
+    {% if categoria %}
+    <p><strong>Categoría:</strong> {{ categoria }}</p>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Fecha</th>
+                <th>Fuente</th>
+                <th>Contenido</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for noticia in noticias %}
+            <tr>
+                <td>{{ noticia[0] }}</td>
+                <td>{{ noticia[1] }}</td>
+                <td>{{ noticia[2] }}</td>
+                <td>{{ noticia[5] }}</td>
+                <td>{{ noticia[3] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>

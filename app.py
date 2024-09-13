@@ -1,14 +1,20 @@
+import io
 import re
 from datetime import datetime, timedelta
 from threading import Thread
 
+import matplotlib
+
+matplotlib.use('Agg')  # Usar el backend Agg antes de importar pyplot
+import matplotlib.pyplot as plt
 import mysql.connector
 import pandas as pd
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from flask import (Flask, redirect, render_template, render_template_string,
-                   request, send_file, url_for)
+from flask import (Flask, Response, redirect, render_template,
+                   render_template_string, request, send_file, url_for)
+from weasyprint import HTML
 
 # Conexión a la base de datos MySQL
 db = mysql.connector.connect(
@@ -57,37 +63,51 @@ def noticia_existe(url):
     result = cursor.fetchone()
     return result[0] > 0
 
+
 # Función para insertar o actualizar una noticia en la base de datos
 def insert_noticia(title, date, content, image, url, source, full_content):
+    # Obtener la fecha actual para el scraping
+    fecha_scraping = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
     # Verificamos si la noticia ya existe usando la URL como identificador único
     if noticia_existe(url):
         # Si la noticia existe, actualizamos los campos
         print(f"Noticia encontrada: {title}. Se actualizará.")
         query = """
         UPDATE noticias 
-        SET title = %s, date = %s, content = %s, image = %s, source = %s, full_content = %s
+        SET title = %s, date = %s, content = %s, image = %s, source = %s, full_content = %s, fecha_scraping = %s
         WHERE url = %s
         """
-        values = (title, date, content, image, source, full_content, url)
+        values = (title, date, content, image, source, full_content, fecha_scraping, url)
     else:
         # Si la noticia no existe, la insertamos
         print(f"Insertando noticia: {title}.")
         query = """
-        INSERT INTO noticias (title, date, content, image, url, source, full_content) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO noticias (title, date, content, image, url, source, full_content, fecha_scraping) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
-        values = (title, date, content, image, url, source, full_content)
+        values = (title, date, content, image, url, source, full_content, fecha_scraping)
 
     # Ejecutamos la consulta
     cursor.execute(query, values)
     db.commit()
     print(f"Operación completada para la noticia: {title}")
 
-# Función para obtener todas las noticias de la base de datos
-def get_all_noticias():
-    query = "SELECT * FROM noticias ORDER BY date DESC"
+# Función para obtener el conteo de noticias scrapeadas por día usando la nueva columna 'fecha_scraping'
+def get_noticias_por_dia():
+    query = """
+    SELECT DATE(fecha_scraping) as scrape_date, COUNT(*) as total_noticias 
+    FROM noticias 
+    GROUP BY scrape_date 
+    ORDER BY scrape_date DESC
+    """
     cursor.execute(query)
-    return cursor.fetchall()
+    result = cursor.fetchall()
+
+    # Convertimos el resultado en un DataFrame de pandas para facilitar el manejo
+    df = pd.DataFrame(result, columns=['scrape_date', 'total_noticias'])
+    return df
+
 
 # Función para obtener las noticias filtradas por una categoría
 def get_noticias_por_categoria(categoria_nombre):
@@ -185,6 +205,76 @@ def exportar_noticias_a_csv():
     print("Noticias exportadas correctamente a 'noticias_exportadas.csv' con pandas.")
     
 
+@app.route('/descargar_pdf')
+def descargar_pdf_rango():
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    categoria = request.args.get('categoria')
+
+    # Construir la consulta SQL
+    query = "SELECT * FROM noticias WHERE 1=1"
+    params = []
+
+    if fecha_inicio and fecha_fin:
+        query += " AND date BETWEEN %s AND %s"
+        params.extend([fecha_inicio, fecha_fin])
+
+    if categoria:
+        query += " AND source = %s"
+        params.append(categoria)
+
+    query += " ORDER BY date DESC"
+    
+    cursor.execute(query, params)
+    noticias = cursor.fetchall()
+
+    # Renderizamos un HTML con los datos de las noticias
+    rendered_html = render_template('reporte_pdf.html', noticias=noticias, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin, categoria=categoria)
+
+    # Convertimos el HTML a PDF con WeasyPrint
+    pdf = HTML(string=rendered_html).write_pdf()
+
+    # Descargar el archivo PDF
+    response = Response(pdf, mimetype="application/pdf")
+    response.headers.set("Content-Disposition", "attachment", filename="reporte_noticias.pdf")
+    return response
+
+
+
+@app.route('/descargar_reporte_csv', methods=['GET'])
+def descargar_reporte_csv():
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    categoria = request.args.get('categoria')
+
+    # Construir la consulta SQL
+    query = "SELECT * FROM noticias WHERE 1=1"
+    params = []
+
+    if fecha_inicio and fecha_fin:
+        query += " AND date BETWEEN %s AND %s"
+        params.extend([fecha_inicio, fecha_fin])
+
+    if categoria:
+        query += " AND source = %s"
+        params.append(categoria)
+
+    cursor.execute(query, params)
+    noticias = cursor.fetchall()
+
+    # Crear el CSV
+    noticias_df = pd.DataFrame(noticias, columns=['ID', 'Título', 'Fecha', 'Contenido', 'Imagen', 'Fuente', 'Contenido Completo', 'Fecha de Scraping'])
+    csv_data = noticias_df.to_csv(index=False)
+
+    # Retornar el archivo CSV
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment;filename=reporte_noticias.csv'}
+    )
+
+
+
 
 # Ruta para descargar el CSV generado con noticias
 @app.route('/descargar_csv')
@@ -222,6 +312,18 @@ def home():
     return render_template('index.html', news=noticias, categorias=categorias_con_conteo, total_noticias=total_noticias, noticias_del_dia=noticias_del_dia, total_noticias_del_dia=total_noticias_del_dia)
 
 
+# Función para obtener todas las noticias de la base de datos
+def get_all_noticias():
+    query = "SELECT * FROM noticias ORDER BY date DESC"
+    cursor.execute(query)
+    return cursor.fetchall()
+
+def get_categorias():
+    query = "SELECT DISTINCT source FROM noticias"
+    cursor.execute(query)
+    result = cursor.fetchall()
+    return [categoria[0] for categoria in result]  # Retorna solo los nombres de las categorías
+
 
 
 # Ruta para mostrar noticias filtradas por categoría
@@ -239,13 +341,88 @@ def noticias_por_categoria(categoria_nombre):
 # Ruta para mostrar detalles de una noticia
 @app.route('/noticia/<int:noticia_id>')
 def noticia_detallada(noticia_id):
+    # Obtener la noticia actual desde la base de datos
     cursor.execute("SELECT * FROM noticias WHERE id = %s", (noticia_id,))
     noticia = cursor.fetchone()
     
     if noticia:
-        return render_template('detalle.html', noticia=noticia)
+        # La categoría o fuente de la noticia está en el campo noticia[5], asegúrate de que esto es correcto
+        categoria = noticia[5]
+        
+        # Obtener las noticias relacionadas de la misma categoría (fuente), excluyendo la noticia actual
+        query = "SELECT * FROM noticias WHERE source = %s AND id != %s ORDER BY date DESC LIMIT 5"
+        cursor.execute(query, (categoria, noticia_id))  # Usamos placeholders para evitar problemas
+        noticias_relacionadas = cursor.fetchall()
+
+        # Imprimir para diagnóstico (puedes remover estos prints luego)
+        print("Noticia actual:", noticia)
+        print("Noticias relacionadas:", noticias_relacionadas)
+        
+        # Renderizamos el template con la noticia actual y las noticias relacionadas
+        return render_template('detalle.html', noticia=noticia, noticias_relacionadas=noticias_relacionadas)
     else:
         return "No se encontró la noticia.", 404
+    
+@app.route('/graficos/noticias_por_dia')
+def graficar_noticias_por_dia():
+    # Obtener los datos de las noticias scrapeadas por día
+    df = get_noticias_por_dia()
+
+    # Crear un gráfico de barras con Matplotlib
+    plt.figure(figsize=(10, 6))
+    plt.bar(df['scrape_date'].astype(str), df['total_noticias'], color='blue')  # Usar solo la parte de la fecha
+    plt.xlabel('Fecha de Scraping')
+    plt.ylabel('Total de Noticias')
+    plt.title('Noticias Scrapeadas por Día')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    # Guardar la figura en un buffer de memoria
+    img = io.BytesIO()
+    plt.savefig(img, format='png')
+    img.seek(0)
+    plt.close()
+
+    # Devolver la imagen como una respuesta HTTP
+    return Response(img.getvalue(), mimetype='image/png')
+
+@app.route('/estadisticas')
+def ver_estadisticas():
+    return render_template('estadisticas.html')  # Cargar la página que mostrará las estadísticas
+
+@app.route('/reportes', methods=['GET', 'POST'])
+def ver_reportes():
+    noticias = []
+    categorias = get_categorias()  # Obtener las categorías de la base de datos
+    if request.method == 'POST':
+        # Obtener los valores del formulario
+        fecha_inicio = request.form['fecha_inicio']
+        fecha_fin = request.form['fecha_fin']
+        categoria = request.form['categoria']
+
+        # Construir la consulta SQL dinámicamente
+        query = "SELECT * FROM noticias WHERE 1=1"
+        params = []
+
+        # Si se seleccionaron fechas, agregar a la consulta
+        if fecha_inicio and fecha_fin:
+            query += " AND date BETWEEN %s AND %s"
+            params.extend([fecha_inicio, fecha_fin])
+
+        # Si se seleccionó una categoría, agregar a la consulta
+        if categoria:
+            query += " AND source = %s"
+            params.append(categoria)
+
+        # Ejecutar la consulta
+        query += " ORDER BY date DESC"
+        cursor.execute(query, params)
+        noticias = cursor.fetchall()
+
+    return render_template('reportes.html', noticias=noticias, categorias=categorias)
+
+
+
 
 @app.route('/admin', methods=['GET'])
 def admin_page():
@@ -275,12 +452,16 @@ def admin_page():
     # Calcular el número total de páginas
     total_pages = (total_noticias // per_page) + (1 if total_noticias % per_page > 0 else 0)
 
+    # Incluir los datos del gráfico de noticias por día
+    df = get_noticias_por_dia()  # Llamar a la función que obtenga las noticias por día
+
     # Verificar si la solicitud es AJAX y retornar solo la tabla
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return render_template('tabla_noticias.html', noticias=noticias, page=page, total_pages=total_pages)
 
     # Si no es AJAX, renderizar la página completa
-    return render_template('admin.html', noticias=noticias, page=page, total_pages=total_pages, search_query=search_query)
+    return render_template('admin.html', noticias=noticias, page=page, total_pages=total_pages, search_query=search_query, noticias_por_dia=df)
+
 
 
 @app.route('/admin/nueva', methods=['GET', 'POST'])
@@ -347,7 +528,7 @@ def eliminar_noticia(noticia_id):
 
 # Función que ejecutará el scraping periódicamente
 def ejecutar_scraping_periodico():
-    scrape_todas_las_categorias()  # Llamamos a la función de scraping # Limpiamos duplicados
+    scrape_todas_las_categorias()
     print("Scraping periódico ejecutado.")
 
 # Configurar el programador de tareas
@@ -357,9 +538,25 @@ scheduler.start()
 
 def get_noticias_del_dia():
     hoy = datetime.now().strftime('%Y-%m-%d')  # Fecha actual en formato 'YYYY-MM-DD'
-    query = "SELECT * FROM noticias WHERE DATE(date) = %s ORDER BY date DESC"
+    query = "SELECT * FROM noticias WHERE DATE(fecha_scraping) = %s ORDER BY fecha_scraping DESC"
     cursor.execute(query, (hoy,))
     return cursor.fetchall()
+
+
+def get_noticias_por_dia():
+    query = """
+    SELECT DATE(fecha_scraping) as scrape_date, COUNT(*) as total_noticias 
+    FROM noticias 
+    GROUP BY scrape_date 
+    ORDER BY scrape_date DESC
+    """
+    cursor.execute(query)
+    result = cursor.fetchall()
+
+    # Convertimos el resultado en un DataFrame de pandas para facilitar el manejo
+    df = pd.DataFrame(result, columns=['scrape_date', 'total_noticias'])
+    return df
+
 
 
 # Obtener el conteo de noticias por categoría
